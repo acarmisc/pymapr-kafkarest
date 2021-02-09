@@ -1,0 +1,1 @@
+from .kafkarest import MaprKlient
