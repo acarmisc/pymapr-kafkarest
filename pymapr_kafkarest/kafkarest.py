@@ -9,8 +9,8 @@ from pymapr_kafkarest.exceptions import MKExistingInstanceException, MKSubscript
 LOGGING_LEVEL = os.environ.get('KAFKAREST_LOG_LEVEL', 'DEBUG')
 
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-3.3s]  %(message)s")
-logger = logging.getLogger(LOGGING_LEVEL)
-logger.setLevel()
+logger = logging.getLogger()
+logger.setLevel(LOGGING_LEVEL)
 
 consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(logFormatter)
