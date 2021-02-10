@@ -51,7 +51,7 @@ Connect, subscribe and consume messages as follows:
 base_url = 'http://my-endopoint:8082'
 
 if __name__ == '__main__':
-    mk = MaprKlient(base_url, 'trimurti', headers=headers, topics=['/streams/trimurti:frameadv'])
+    mk = MaprKlient(base_url, user_group, headers=headers, topics=topics)
     mk.connect(clear=True)
     mk.subscribe()
     
