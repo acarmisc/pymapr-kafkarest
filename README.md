@@ -17,6 +17,12 @@ The original documentation of the REST calls can be found [here](https://docs.da
 pip install pymapr-kafkarest
 ```
 
+## Runtime configurations
+
+- `KAFKAREST_LOG_LEVEL`: allows to set the log level... default to `INFO`
+
+TBC
+
 ## Usage
 
 Import the lib

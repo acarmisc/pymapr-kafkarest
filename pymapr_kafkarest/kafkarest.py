@@ -6,7 +6,7 @@ from slugify import slugify
 
 from pymapr_kafkarest.exceptions import MKExistingInstanceException, MKSubscriptionException, MKConsumerException
 
-LOGGING_LEVEL = os.environ.get('KAFKAREST_LOG_LEVEL', 'DEBUG')
+LOGGING_LEVEL = os.environ.get('KAFKAREST_LOG_LEVEL', 'INFO')
 
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-3.3s]  %(message)s")
 logger = logging.getLogger()
