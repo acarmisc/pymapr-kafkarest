@@ -19,7 +19,7 @@ pip install pymapr-kafkarest
 
 ## Runtime configurations
 
-- `KAFKAREST_LOG_LEVEL`: allows to set the log level... default to `INFO`
+- `KAFKAREST_LOG_LEVEL`: allows to set the log level... default to `DEBUG`
 
 TBC
 
@@ -60,6 +60,26 @@ if __name__ == '__main__':
     print(messages)
 ```
 
+Connect and produce messages:
+
+```python
+from pymapr_kafkarest import MaprKlient
+from pymapr_kafkarest.kafkarest import MaprKProducer
+
+base_url = 'https://localhost:8082'
+headers = {}
+user_group = 'me'
+
+if __name__ == '__main__':
+
+    # producing
+    mp = MaprKProducer(base_url, user_group, headers=headers)
+
+    msgs = [dict(key='0099', value=dict(color='red', shape='square'))]
+
+    mp.produce(messages=msgs, topic='/streams/foo')
+
+```
 ## TODO
 
 - [ ] a lot of methods are not yet implemented

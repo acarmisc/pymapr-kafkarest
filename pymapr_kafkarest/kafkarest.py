@@ -1,12 +1,15 @@
+import json
 import os
+import urllib
 import socket
 import logging
 import requests
+from requests.auth import HTTPBasicAuth
 from slugify import slugify
 
 from pymapr_kafkarest.exceptions import MKExistingInstanceException, MKSubscriptionException, MKConsumerException
 
-LOGGING_LEVEL = os.environ.get('KAFKAREST_LOG_LEVEL', 'INFO')
+LOGGING_LEVEL = os.environ.get('KAFKAREST_LOG_LEVEL', 'DEBUG')
 
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-3.3s]  %(message)s")
 logger = logging.getLogger()
@@ -29,14 +32,51 @@ class MaprKafkaBase:
         self.headers = {'Content-Type': 'application/vnd.kafka.v2+json'}
         self.headers.update(**headers)
 
-    def _produce(self, topic=None, partition=None):
+        if username and password:
+            self.auth = HTTPBasicAuth(username, password)
+        else:
+            self.auth = None
+
+
+class MaprKProducer(MaprKafkaBase):
+
+    def __init__(self, base_url, username=None, password=None, headers=None):
+
+        super().__init__(base_url, username, password, headers)
+
+    def _produce(self, messages: list, topic=None, partition=None):
         """
         Produces messages to a topic into a partition of a topic.
         If no topic are provided will produce to all topics in the instance.
         :param topic:
+        :param message:
+        :param partition:
         :return:
         """
-        raise NotImplementedError
+        _partition_part = f'/partitions/{partition}' if partition else ''
+
+        _msgs = dict(records=[])
+        _msgs['records'] = messages
+
+        headers = self.headers.copy()
+        headers['Content-Type'] = 'application/vnd.kafka.json.v2+json'
+        headers['Accept'] = 'application/vnd.kafka.v2+json'
+
+        if topic:
+            encoded_topic = urllib.parse.quote(topic, safe='')
+            logger.debug(f'Posting {len(messages)} to {topic}')
+            url = f'{self.base_url}topics/{encoded_topic}{_partition_part}'
+        else:
+            logger.debug(f'Posting {len(messages)} to all instance topics')
+            url = f'{self.base_url}topics/{_partition_part}'
+
+        r = requests.post(url, headers=headers, json=_msgs, auth=self.auth)
+
+        assert r.status_code == 200, f'Error creating messages into {topic}: ' \
+                                     f'{r.status_code} {r.text}'
+
+    def produce(self, messages, topic=None, partition=0):
+        self._produce(messages, topic=topic, partition=partition)
 
 
 class MaprKlient(MaprKafkaBase):
@@ -103,7 +143,7 @@ class MaprKlient(MaprKafkaBase):
         :return:
         """
         logger.debug(f'Deleting instance {self.instance_name} on {self.instance_url}')
-        r = requests.delete(self.instance_url, headers=self.headers)
+        r = requests.delete(self.instance_url, headers=self.headers, auth=self.auth)
 
         assert r.status_code == 204, f'Error deleting instance {self.instance_name}: ' \
                                      f'{r.status_code} {r.text}'
@@ -118,7 +158,7 @@ class MaprKlient(MaprKafkaBase):
         logger.debug(f'Creating instance {self.instance_name} calling {url}...')
         payload = {'name': self.instance_name, 'auto.offset.reset': auto_offset, 'format': format}
 
-        r = requests.post(url, headers=self.headers, json=payload)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
         if r.status_code == 409:
             raise MKExistingInstanceException(f'Instance {self.instance_name} already exists!')
 
@@ -161,7 +201,7 @@ class MaprKlient(MaprKafkaBase):
         payload['topics'] = self.topics
 
         logger.info(f'Creating a subscription for {self.instance_name} for topics {self.topics}...')
-        r = requests.post(url, headers=self.headers, json=payload)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
 
         if r.status_code != 204:
             raise MKSubscriptionException(f'({r.status_code}) {r.text}')
@@ -178,7 +218,7 @@ class MaprKlient(MaprKafkaBase):
         url = self.instance_url + '/subscription'
 
         logger.info(f'Checking active subscription for {self.instance_name}')
-        r = requests.get(url, headers=self.headers)
+        r = requests.get(url, headers=self.headers, auth=self.auth)
 
         if r.status_code == 404:
             logger.debug('No active consumer found => no active subscriptions.')
@@ -225,7 +265,7 @@ class MaprKlient(MaprKafkaBase):
             payload['offsets'].append({'topic': _t, 'partition': self.partition, 'offset': position})
 
         logger.info(f'Changing position to {position} for {self.topics}.')
-        r = requests.post(url, headers=self.headers, json=payload)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
         assert r.status_code == 204, f'Error positioning to {position}'
 
     def _seek_beginning(self):
@@ -248,19 +288,23 @@ class MaprKlient(MaprKafkaBase):
         """
         raise NotImplementedError
 
-    def _records(self) -> list:
+    def _records(self, max_bytes=None) -> list:
         """
         Fetches data for the topics or partitions specified using one of the subscribe/assign APIs.
         :return:
         """
+        _params = dict()
         url = self.instance_url + '/records'
         logger.info(f'Getting records from {url}')
+
+        if max_bytes:
+            _params['max_bytes'] = max_bytes
 
         _headers = self.headers.copy()
         _headers.pop('Content-Type')
         _headers['Accept'] = 'application/vnd.kafka.json.v2+json'
 
-        r = requests.request("GET", url, headers=_headers)
+        r = requests.get(url, headers=_headers, auth=self.auth, params=_params)
         if r.status_code != 200:
             raise MKConsumerException(f'Error consuming messages: [{r.status_code}] {r.text}')
 
@@ -296,7 +340,7 @@ class MaprKlient(MaprKafkaBase):
         """
         self._subscription()
 
-    def consume(self, seek=None, position=None):
+    def consume(self, seek=None, position=None, max_bytes=None):
         """
         TBD
         :param seek:
