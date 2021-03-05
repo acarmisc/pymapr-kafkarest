@@ -22,7 +22,15 @@ logger.addHandler(consoleHandler)
 
 class MaprKafkaBase:
 
-    def __init__(self, base_url, username=None, password=None, headers=None, topics=None):
+    def __init__(self, base_url, username=None, password=None, headers=None, topics=None, verify=False):
+        """
+        :param base_url:
+        :param username:
+        :param password:
+        :param headers:
+        :param topics:
+        :param verify:
+        """
         self.base_url = base_url
         self.username = username
         self.password = password
@@ -31,6 +39,8 @@ class MaprKafkaBase:
 
         self.headers = {'Content-Type': 'application/vnd.kafka.v2+json'}
         self.headers.update(**headers)
+
+        self.verify = verify
 
         if username and password:
             self.auth = HTTPBasicAuth(username, password)
@@ -70,7 +80,7 @@ class MaprKProducer(MaprKafkaBase):
             logger.debug(f'Posting {len(messages)} to all instance topics')
             url = f'{self.base_url}topics/{_partition_part}'
 
-        r = requests.post(url, headers=headers, json=_msgs, auth=self.auth)
+        r = requests.post(url, headers=headers, json=_msgs, auth=self.auth, verify=self.verify)
 
         assert r.status_code == 200, f'Error creating messages into {topic}: ' \
                                      f'{r.status_code} {r.text}'
@@ -82,9 +92,8 @@ class MaprKProducer(MaprKafkaBase):
 class MaprKlient(MaprKafkaBase):
 
     def __init__(self, base_url, consumer, username=None, password=None, headers=None,
-                 topics=None, instance=None, partition=0, follow_base_uri=False):
+                 topics=None, instance=None, partition=0, follow_base_uri=False, verify=False):
         """
-
         :param base_url:
         :param consumer:
         :param username:
@@ -94,8 +103,9 @@ class MaprKlient(MaprKafkaBase):
         :param instance:
         :param partition:
         :param follow_base_uri:
+        :param verify:
         """
-        super().__init__(base_url, username, password, headers, topics)
+        super().__init__(base_url, username, password, headers, topics, verify)
         self.consumer = consumer
         self.instance_name = instance or slugify(socket.gethostname())
         self.partition = partition
@@ -143,7 +153,7 @@ class MaprKlient(MaprKafkaBase):
         :return:
         """
         logger.debug(f'Deleting instance {self.instance_name} on {self.instance_url}')
-        r = requests.delete(self.instance_url, headers=self.headers, auth=self.auth)
+        r = requests.delete(self.instance_url, headers=self.headers, auth=self.auth, verify=self.verify)
 
         assert r.status_code == 204, f'Error deleting instance {self.instance_name}: ' \
                                      f'{r.status_code} {r.text}'
@@ -158,7 +168,7 @@ class MaprKlient(MaprKafkaBase):
         logger.debug(f'Creating instance {self.instance_name} calling {url}...')
         payload = {'name': self.instance_name, 'auto.offset.reset': auto_offset, 'format': format}
 
-        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth, verify=self.verify)
         if r.status_code == 409:
             raise MKExistingInstanceException(f'Instance {self.instance_name} already exists!')
 
@@ -201,7 +211,7 @@ class MaprKlient(MaprKafkaBase):
         payload['topics'] = self.topics
 
         logger.info(f'Creating a subscription for {self.instance_name} for topics {self.topics}...')
-        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth, verify=self.verify)
 
         if r.status_code != 204:
             raise MKSubscriptionException(f'({r.status_code}) {r.text}')
@@ -218,7 +228,7 @@ class MaprKlient(MaprKafkaBase):
         url = self.instance_url + '/subscription'
 
         logger.info(f'Checking active subscription for {self.instance_name}')
-        r = requests.get(url, headers=self.headers, auth=self.auth)
+        r = requests.get(url, headers=self.headers, auth=self.auth, verify=self.verify)
 
         if r.status_code == 404:
             logger.debug('No active consumer found => no active subscriptions.')
@@ -265,7 +275,7 @@ class MaprKlient(MaprKafkaBase):
             payload['offsets'].append({'topic': _t, 'partition': self.partition, 'offset': position})
 
         logger.info(f'Changing position to {position} for {self.topics}.')
-        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth)
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth, verify=self.verify)
         assert r.status_code == 204, f'Error positioning to {position}'
 
     def _seek_beginning(self):
@@ -276,7 +286,15 @@ class MaprKlient(MaprKafkaBase):
         https://localhost:8082/consumers/grouptest/instances/user/positions/beginning
         :return:
         """
-        raise NotImplementedError
+        url = self.instance_url + '/positions/beginning'
+
+        payload = {'partitions': []}
+        for _t in self.topics:
+            payload['partitions'].append({'topic': _t, 'partition': self.partition})
+
+        logger.info(f'Changing position to beginning for {self.topics}.')
+        r = requests.post(url, headers=self.headers, json=payload, auth=self.auth, verify=self.verify)
+        assert r.status_code == 204, f'Error seek to beginning'
 
     def _seek_end(self):
         """
@@ -340,7 +358,7 @@ class MaprKlient(MaprKafkaBase):
         """
         self._subscription()
 
-    def consume(self, seek=None, position=None, max_bytes=None):
+    def consume(self, seek=None, position=None, max_bytes=None, beginning=None):
         """
         TBD
         :param seek:
@@ -349,5 +367,8 @@ class MaprKlient(MaprKafkaBase):
         """
         if position is not None:
             self._position(position)
+
+        if beginning is not None:
+            self._seek_beginning()
 
         return self._records()
