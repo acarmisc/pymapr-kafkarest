@@ -358,7 +358,7 @@ class MaprKlient(MaprKafkaBase):
         """
         self._subscription()
 
-    def consume(self, seek=None, position=None, max_bytes=None, beginning=None):
+    def consume(self, seek=None, position=None, max_bytes=None):
         """
         TBD
         :param seek:
@@ -368,7 +368,7 @@ class MaprKlient(MaprKafkaBase):
         if position is not None:
             self._position(position)
 
-        if beginning is not None:
+        if seek is not None:
             self._seek_beginning()
 
         return self._records()
