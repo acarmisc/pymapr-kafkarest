@@ -322,7 +322,7 @@ class MaprKlient(MaprKafkaBase):
         _headers.pop('Content-Type')
         _headers['Accept'] = 'application/vnd.kafka.json.v2+json'
 
-        r = requests.get(url, headers=_headers, auth=self.auth, params=_params)
+        r = requests.get(url, headers=_headers, auth=self.auth, params=_params, verify=self.verify)
         if r.status_code != 200:
             raise MKConsumerException(f'Error consuming messages: [{r.status_code}] {r.text}')
 
