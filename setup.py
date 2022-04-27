@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 DESCRIPTION = 'Python MAPR Kafka REST wrapper'
 LONG_DESCRIPTION = 'Lazy way to interact with MAPR Kafka REST proxy from python.'
 

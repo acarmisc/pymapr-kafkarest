@@ -22,7 +22,7 @@ logger.addHandler(consoleHandler)
 
 class MaprKafkaBase:
 
-    def __init__(self, base_url, username=None, password=None, headers=None, topics=None, verify=False):
+    def __init__(self, base_url, username=None, password=None, headers=None, topics=None, verify=False, retry=3):
         """
         :param base_url:
         :param username:
@@ -34,6 +34,7 @@ class MaprKafkaBase:
         self.base_url = base_url
         self.username = username
         self.password = password
+        self.retry = retry
 
         self.topics = topics if topics is not None else list()
 
@@ -50,9 +51,8 @@ class MaprKafkaBase:
 
 class MaprKProducer(MaprKafkaBase):
 
-    def __init__(self, base_url, username=None, password=None, headers=None):
-
-        super().__init__(base_url, username, password, headers)
+    def __init__(self, base_url, username=None, password=None, headers=None, retry=3):        
+        super().__init__(base_url, username, password, headers, retry)
 
     def _produce(self, messages: list, topic=None, partition=None):
         """
@@ -80,8 +80,13 @@ class MaprKProducer(MaprKafkaBase):
             logger.debug(f'Posting {len(messages)} to all instance topics')
             url = f'{self.base_url}topics/{_partition_part}'
 
-        r = requests.post(url, headers=headers, json=_msgs, auth=self.auth, verify=self.verify)
-
+        for i in range(1 + self.retry):
+            r = requests.post(url, headers=headers, json=_msgs, auth=self.auth, verify=self.verify)
+            if r.status_code == 200:
+                continue
+            else:
+                loggger.warning(f'Failed to send message to Mapr... Attempt no. {i}')
+                
         assert r.status_code == 200, f'Error creating messages into {topic}: ' \
                                      f'{r.status_code} {r.text}'
 
